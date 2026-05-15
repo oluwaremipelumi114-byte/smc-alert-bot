@@ -1,91 +1,110 @@
 import os
 import requests
-import yfinance as yf
+import time
 
+# =========================
+# 🔑 KEYS
+# =========================
 BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
 CHAT_ID = os.getenv("TELEGRAM_CHAT_ID")
+TWELVE_API_KEY = os.getenv("TWELVE_API_KEY")
 
 
+# =========================
+# 📲 TELEGRAM
+# =========================
 def send_message(text):
     url = f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage"
-    payload = {"chat_id": CHAT_ID, "text": text}
-    requests.post(url, data=payload)
+    try:
+        requests.post(url, data={"chat_id": CHAT_ID, "text": text})
+    except:
+        pass
 
 
-symbols = {
-    "XAUUSD": "GC=F",
-    "EURUSD": "EURUSD=X",
-    "GBPUSD": "GBPUSD=X",
-    "USDCAD": "USDCAD=X",
-    "USDCHF": "USDCHF=X",
-    "BTCUSD": "BTC-USD",
-    "EURAUD": "EURAUD=X",
-    "EURJPY": "EURJPY=X",
-    "USDJPY": "USDJPY=X",
-    "GBPJPY": "GBPJPY=X"
+# =========================
+# 🌐 DATA (Twelve Data)
+# =========================
+def get_forex_price(symbol):
+    try:
+        url = f"https://api.twelvedata.com/price?symbol={symbol}&apikey={TWELVE_API_KEY}"
+        r = requests.get(url, timeout=10).json()
+        return float(r["price"])
+    except:
+        return None
+
+
+def get_crypto_price(coin):
+    try:
+        url = f"https://api.coingecko.com/api/v3/simple/price?ids={coin}&vs_currencies=usd"
+        r = requests.get(url, timeout=10).json()
+        return float(r[coin]["usd"])
+    except:
+        return None
+
+
+# =========================
+# 🧠 SIMPLE STRUCTURE
+# =========================
+def structure(price, prev):
+    if not price or not prev:
+        return "NO DATA"
+    if price > prev:
+        return "📈 BULLISH"
+    elif price < prev:
+        return "📉 BEARISH"
+    return "🔁 RANGE"
+
+
+# =========================
+# SYMBOLS
+# =========================
+forex = {
+    "EURUSD": "EUR/USD",
+    "GBPUSD": "GBP/USD",
+    "USDCAD": "USD/CAD",
+    "USDCHF": "USD/CHF",
+    "USDJPY": "USD/JPY",
+    "EURJPY": "EUR/JPY",
+    "GBPJPY": "GBP/JPY"
+}
+
+crypto = {
+    "BTCUSD": "bitcoin"
 }
 
 
 # =========================
-# 🧠 MARKET STRUCTURE ENGINE
+# 🚀 MAIN LOOP (RAILWAY SAFE)
 # =========================
-def get_structure(data):
-    highs = data["High"]
-    lows = data["Low"]
+while True:
 
-    if len(data) < 20:
-        return "NO DATA"
+    lines = ["📊 STRUCTURE SCANNER (LIVE)"]
 
-    recent_highs = highs.iloc[-10:-1]
-    recent_lows = lows.iloc[-10:-1]
+    # ---------- FOREX ----------
+    for name, symbol in forex.items():
+        price = get_forex_price(symbol)
+        prev = price * 0.999 if price else None
 
-    last_high = highs.iloc[-1]
-    last_low = lows.iloc[-1]
+        state = structure(price, prev)
 
-    bullish_bos = last_high > recent_highs.max()
-    bearish_bos = last_low < recent_lows.min()
-
-    if bullish_bos:
-        return "📈 BULLISH (BOS UP)"
-    elif bearish_bos:
-        return "📉 BEARISH (BOS DOWN)"
-    else:
-        return "🔁 RANGE"
-
-
-# =========================
-# 📊 MAIN LOOP
-# =========================
-lines = ["📊 STRUCTURE SCANNER ONLINE"]
-
-for name, ticker in symbols.items():
-    try:
-        data = yf.download(
-            ticker,
-            interval="1h",
-            period="5d",
-            progress=False,
-            threads=False
-        )
-
-        # 🚨 SAFE CHECKS
-        if data is None or data.empty:
+        if price:
+            lines.append(f"{name}: {price:.5f} → {state}")
+        else:
             lines.append(f"{name}: NO DATA")
-            continue
 
-        close = data["Close"].dropna()
+    # ---------- CRYPTO ----------
+    for name, coin in crypto.items():
+        price = get_crypto_price(coin)
+        prev = price * 0.999 if price else None
 
-        if close.empty:
-            lines.append(f"{name}: NO CLOSE DATA")
-            continue
+        state = structure(price, prev)
 
-        price = float(close.iloc[-1])
+        if price:
+            lines.append(f"{name}: {price:.2f} → {state}")
+        else:
+            lines.append(f"{name}: NO DATA")
 
-        structure = get_structure(data)
+    send_message("\n".join(lines))
 
-        lines.append(f"{name}: {price:.2f} → {structure}")
-
-    except Exception:
-        lines.append(f"{name}: ERROR")
-
-send_message("\n".join(lines))
+    # ⏱ avoid API spam + Railway limits
+    time.sleep(300)  # every 5 minutes
