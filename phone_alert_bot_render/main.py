@@ -18,13 +18,13 @@ def send_message(text):
 
 
 # =========================
-# FOREX (FIXED - FREE & STABLE)
+# FOREX (FIXED - ECB BACKED)
 # =========================
 def get_forex_price(base, quote):
     try:
-        url = f"https://api.exchangerate.host/convert?from={base}&to={quote}"
+        url = f"https://api.frankfurter.app/latest?from={base}&to={quote}"
         r = requests.get(url, timeout=10).json()
-        return float(r["result"])
+        return float(r["rates"][quote])
     except:
         return None
 
@@ -42,7 +42,7 @@ def get_crypto_price(coin):
 
 
 # =========================
-# STRUCTURE (simple)
+# STRUCTURE (simple momentum)
 # =========================
 def structure(price, prev):
     if price is None or prev is None:
@@ -78,7 +78,7 @@ crypto = {
 # =========================
 while True:
 
-    lines = ["📊 STRUCTURE SCANNER (LIVE FIXED)"]
+    lines = ["📊 STRUCTURE SCANNER (LIVE - STABLE FX FIX)"]
 
     # ---------- FOREX ----------
     for name, pair in forex.items():
