@@ -2,9 +2,6 @@ import os
 import requests
 import time
 
-# =========================
-# TELEGRAM SETUP
-# =========================
 BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
 CHAT_ID = os.getenv("TELEGRAM_CHAT_ID")
 
@@ -18,19 +15,19 @@ def send_message(text):
 
 
 # =========================
-# FX PRICE (FREE STABLE API)
+# FX (STABLE - ECB DATA)
 # =========================
-def get_fx(symbol):
+def get_fx(base, quote):
     try:
-        url = f"https://api.exchangerate.host/latest?base={symbol[:3]}&symbols={symbol[3:]}"
+        url = f"https://api.frankfurter.app/latest?from={base}&to={quote}"
         r = requests.get(url, timeout=10).json()
-        return float(r["rates"][symbol[3:]])
+        return float(r["rates"][quote])
     except:
         return None
 
 
 # =========================
-# CRYPTO PRICE
+# CRYPTO
 # =========================
 def get_crypto(coin):
     try:
@@ -44,24 +41,29 @@ def get_crypto(coin):
 # =========================
 # SYMBOLS
 # =========================
-fx_symbols = [
-    "EURUSD", "GBPUSD", "USDCAD",
-    "USDCHF", "USDJPY", "EURJPY", "GBPJPY"
-]
+fx_pairs = {
+    "EURUSD": ("EUR", "USD"),
+    "GBPUSD": ("GBP", "USD"),
+    "USDCAD": ("USD", "CAD"),
+    "USDCHF": ("USD", "CHF"),
+    "USDJPY": ("USD", "JPY"),
+    "EURJPY": ("EUR", "JPY"),
+    "GBPJPY": ("GBP", "JPY")
+}
 
-crypto_symbols = {
+crypto = {
     "BTCUSD": "bitcoin"
 }
 
 
 # =========================
-# STORAGE (for structure + liquidity)
+# HISTORY STORAGE
 # =========================
-history = {s: [] for s in fx_symbols}
+history = {k: [] for k in fx_pairs}
 
 
 # =========================
-# PHASE 3 ENGINE (LIQUIDITY + MSS)
+# LIQUIDITY ENGINE (REAL FIXED LOGIC)
 # =========================
 def liquidity_engine(data):
     if len(data) < 5:
@@ -71,18 +73,16 @@ def liquidity_engine(data):
     recent_low = min(data[-5:])
 
     last = data[-1]
-    prev = data[-2] if len(data) > 1 else last
+    prev = data[-2]
 
     sweep = None
     mss = None
 
-    # liquidity sweep detection
     if last > recent_high:
         sweep = "🔥 BUY-SIDE LIQUIDITY SWEPT"
     elif last < recent_low:
         sweep = "🔥 SELL-SIDE LIQUIDITY SWEPT"
 
-    # MSS logic
     if sweep == "🔥 BUY-SIDE LIQUIDITY SWEPT" and last < prev:
         mss = "📉 MSS BEARISH"
     elif sweep == "🔥 SELL-SIDE LIQUIDITY SWEPT" and last > prev:
@@ -96,28 +96,25 @@ def liquidity_engine(data):
 # =========================
 while True:
 
-    lines = ["📊 PHASE 1 → 3 ICT SCANNER (LIVE)"]
+    lines = ["📊 ICT LIQUIDITY SCANNER (STABLE VERSION)"]
 
-    # =========================
-    # FX PROCESS
-    # =========================
-    for sym in fx_symbols:
+    # FX
+    for pair, (base, quote) in fx_pairs.items():
 
-        price = get_fx(sym)
+        price = get_fx(base, quote)
 
-        if not price:
-            lines.append(f"{sym}: NO DATA")
+        if price is None:
+            lines.append(f"{pair}: NO DATA")
             continue
 
-        # store history
-        history[sym].append(price)
+        history[pair].append(price)
 
-        if len(history[sym]) > 20:
-            history[sym].pop(0)
+        if len(history[pair]) > 20:
+            history[pair].pop(0)
 
-        sweep, mss = liquidity_engine(history[sym])
+        sweep, mss = liquidity_engine(history[pair])
 
-        msg = f"{sym}: {price:.5f}"
+        msg = f"{pair}: {price:.5f}"
 
         if sweep:
             msg += f" → {sweep}"
@@ -127,10 +124,8 @@ while True:
 
         lines.append(msg)
 
-    # =========================
-    # CRYPTO PROCESS
-    # =========================
-    for name, coin in crypto_symbols.items():
+    # CRYPTO
+    for name, coin in crypto.items():
 
         price = get_crypto(coin)
 
