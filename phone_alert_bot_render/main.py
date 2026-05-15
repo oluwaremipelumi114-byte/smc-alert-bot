@@ -2,10 +2,16 @@ import os
 import requests
 import time
 
+# =========================
+# CONFIG
+# =========================
+API_KEY = os.getenv("TWELVE_API_KEY")
 BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
 CHAT_ID = os.getenv("TELEGRAM_CHAT_ID")
 
-
+# =========================
+# TELEGRAM
+# =========================
 def send_message(text):
     url = f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage"
     try:
@@ -15,76 +21,69 @@ def send_message(text):
 
 
 # =========================
-# FX DATA
+# CANDLE DATA (REAL MARKET DATA)
 # =========================
-def get_fx(base, quote):
+def get_candles(symbol):
     try:
-        url = f"https://api.frankfurter.app/latest?from={base}&to={quote}"
+        url = (
+            f"https://api.twelvedata.com/time_series"
+            f"?symbol={symbol}"
+            f"&interval=1h"
+            f"&outputsize=50"
+            f"&apikey={API_KEY}"
+        )
+
         r = requests.get(url, timeout=10).json()
-        return float(r["rates"][quote])
+
+        if "values" not in r:
+            return None
+
+        candles = r["values"]
+
+        highs = [float(c["high"]) for c in candles]
+        lows = [float(c["low"]) for c in candles]
+        closes = [float(c["close"]) for c in candles]
+
+        return highs, lows, closes
+
     except:
         return None
 
 
 # =========================
-# SYMBOLS
+# STRUCTURE ENGINE
 # =========================
-fx_pairs = {
-    "EURUSD": ("EUR", "USD"),
-    "GBPUSD": ("GBP", "USD"),
-    "USDCAD": ("USD", "CAD"),
-    "USDCHF": ("USD", "CHF"),
-    "USDJPY": ("USD", "JPY"),
-    "EURJPY": ("EUR", "JPY"),
-    "GBPJPY": ("GBP", "JPY")
+def structure(highs, lows, closes):
+    if len(highs) < 10:
+        return "NO DATA"
+
+    recent_high = max(highs[:10])
+    recent_low = min(lows[:10])
+
+    last_close = closes[0]
+    prev_close = closes[1]
+
+    # Basic structure shift
+    if last_close > recent_high:
+        return "📈 BULLISH BREAK OF STRUCTURE"
+    elif last_close < recent_low:
+        return "📉 BEARISH BREAK OF STRUCTURE"
+    else:
+        return "🔁 RANGE / CONSOLIDATION"
+
+
+# =========================
+# SYMBOLS (TwelveData format)
+# =========================
+symbols = {
+    "EUR/USD": "EUR/USD",
+    "GBP/USD": "GBP/USD",
+    "USD/CAD": "USD/CAD",
+    "USD/CHF": "USD/CHF",
+    "USD/JPY": "USD/JPY",
+    "EUR/JPY": "EUR/JPY",
+    "GBP/JPY": "GBP/JPY"
 }
-
-
-# =========================
-# STRUCTURE STORAGE (FIXED)
-# =========================
-history = {k: [] for k in fx_pairs}
-
-
-# =========================
-# REAL LIQUIDITY ENGINE (FIXED LOGIC)
-# =========================
-def liquidity_engine(data):
-
-    if len(data) < 6:
-        return None, None
-
-    # OLD structure (previous range)
-    prev_high = max(data[-10:-5])
-    prev_low = min(data[-10:-5])
-
-    # NEW structure (latest range)
-    recent_high = max(data[-5:])
-    recent_low = min(data[-5:])
-
-    last = data[-1]
-    prev = data[-2]
-
-    sweep = None
-    mss = None
-
-    # 🔥 sweep detection (TRUE break + rejection logic)
-    if recent_high > prev_high:
-        if last < recent_high:
-            sweep = "🔥 BUY-SIDE LIQUIDITY SWEPT"
-
-    if recent_low < prev_low:
-        if last > recent_low:
-            sweep = "🔥 SELL-SIDE LIQUIDITY SWEPT"
-
-    # 📉 MSS logic (real shift confirmation)
-    if sweep == "🔥 BUY-SIDE LIQUIDITY SWEPT" and last < prev:
-        mss = "📉 MSS BEARISH CONFIRMED"
-
-    if sweep == "🔥 SELL-SIDE LIQUIDITY SWEPT" and last > prev:
-        mss = "📈 MSS BULLISH CONFIRMED"
-
-    return sweep, mss
 
 
 # =========================
@@ -92,32 +91,21 @@ def liquidity_engine(data):
 # =========================
 while True:
 
-    lines = ["📊 ICT LIQUIDITY ENGINE (FIXED LOGIC)"]
+    lines = ["📊 REAL CANDLE STRUCTURE ENGINE (PHASE 4 READY BASE)"]
 
-    for pair, (base, quote) in fx_pairs.items():
+    for name, symbol in symbols.items():
 
-        price = get_fx(base, quote)
+        data = get_candles(symbol)
 
-        if price is None:
-            lines.append(f"{pair}: NO DATA")
+        if not data:
+            lines.append(f"{name}: NO DATA")
             continue
 
-        history[pair].append(price)
+        highs, lows, closes = data
 
-        if len(history[pair]) > 30:
-            history[pair].pop(0)
+        state = structure(highs, lows, closes)
 
-        sweep, mss = liquidity_engine(history[pair])
-
-        msg = f"{pair}: {price:.5f}"
-
-        if sweep:
-            msg += f" → {sweep}"
-
-        if mss:
-            msg += f" → {mss}"
-
-        lines.append(msg)
+        lines.append(f"{name}: {state}")
 
     send_message("\n".join(lines))
 
