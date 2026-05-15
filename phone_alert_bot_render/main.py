@@ -18,27 +18,19 @@ def send_message(text):
 
 
 # =========================
-# FOREX (OHLC CANDLES - FIXED)
+# PRICE SOURCE (simple + stable)
 # =========================
-def get_candles(symbol):
+def get_price(symbol):
     try:
-        url = f"https://api.frankfurter.app/latest?from={symbol[:3]}&to={symbol[3:]}"
+        url = f"https://api.exchangerate.host/latest?base={symbol[:3]}&symbols={symbol[3:]}"
         r = requests.get(url, timeout=10).json()
-
-        price = float(r["rates"][symbol[3:]])
-
-        # fake OHLC approximation (API limitation workaround)
-        return {
-            "high": price * 1.001,
-            "low": price * 0.999,
-            "close": price
-        }
+        return float(r["rates"][symbol[3:]])
     except:
         return None
 
 
 # =========================
-# CRYPTO (simple price feed)
+# CRYPTO
 # =========================
 def get_crypto_price(coin):
     try:
@@ -50,23 +42,40 @@ def get_crypto_price(coin):
 
 
 # =========================
-# 🧠 STRUCTURE ENGINE (REAL LOGIC)
+# 🧠 LIQUIDITY ENGINE
 # =========================
-def structure(symbol, candles, prev_high, prev_low):
-    if not candles:
-        return "NO DATA", None, None
+def detect_liquidity(prices):
+    if len(prices) < 5:
+        return None, None
 
-    high = candles["high"]
-    low = candles["low"]
+    highs = max(prices[-5:])
+    lows = min(prices[-5:])
 
-    bos = "RANGE"
+    return highs, lows
 
-    if high > prev_high and low > prev_low:
-        bos = "📈 BULLISH BOS"
-    elif high < prev_high and low < prev_low:
-        bos = "📉 BEARISH BOS"
 
-    return bos, high, low
+def detect_sweep(price, prev_high, prev_low):
+    sweep = None
+
+    if price > prev_high:
+        sweep = "🔥 BUY-SIDE LIQUIDITY SWEPT"
+    elif price < prev_low:
+        sweep = "🔥 SELL-SIDE LIQUIDITY SWEPT"
+
+    return sweep
+
+
+def detect_mss(price, prev_price, sweep):
+    if not sweep:
+        return None
+
+    if "BUY-SIDE" in sweep and price < prev_price:
+        return "📉 MSS BEARISH CONFIRMED"
+
+    if "SELL-SIDE" in sweep and price > prev_price:
+        return "📈 MSS BULLISH CONFIRMED"
+
+    return None
 
 
 # =========================
@@ -79,34 +88,45 @@ crypto = {
 }
 
 
+# store history
+history = {sym: [] for sym in forex}
+
+
 # =========================
 # MAIN LOOP
 # =========================
 while True:
 
-    lines = ["📊 PHASE 2 STRUCTURE ENGINE (CANDLE MODE)"]
-
-    # store previous structure levels
-    prev_highs = {}
-    prev_lows = {}
+    lines = ["📊 PHASE 3: LIQUIDITY + MSS ENGINE"]
 
     # ---------- FOREX ----------
     for symbol in forex:
 
-        candles = get_candles(symbol)
+        price = get_price(symbol)
 
-        prev_high = prev_highs.get(symbol, 1)
-        prev_low = prev_lows.get(symbol, 0)
-
-        bos, high, low = structure(symbol, candles, prev_high, prev_low)
-
-        if candles:
-            prev_highs[symbol] = high
-            prev_lows[symbol] = low
-
-            lines.append(f"{symbol}: {candles['close']:.5f} → {bos}")
-        else:
+        if not price:
             lines.append(f"{symbol}: NO DATA")
+            continue
+
+        history[symbol].append(price)
+
+        if len(history[symbol]) > 20:
+            history[symbol].pop(0)
+
+        prev_high, prev_low = detect_liquidity(history[symbol])
+
+        sweep = detect_sweep(price, prev_high, prev_low)
+        mss = detect_mss(price, history[symbol][-2] if len(history[symbol]) > 1 else price, sweep)
+
+        msg = f"{symbol}: {price:.5f}"
+
+        if sweep:
+            msg += f" → {sweep}"
+
+        if mss:
+            msg += f" → {mss}"
+
+        lines.append(msg)
 
     # ---------- CRYPTO ----------
     for name, coin in crypto.items():
@@ -114,7 +134,7 @@ while True:
         price = get_crypto_price(coin)
 
         if price:
-            lines.append(f"{name}: {price:.2f} → 📈 MARKET ACTIVE")
+            lines.append(f"{name}: {price:.2f} → MARKET ACTIVE")
         else:
             lines.append(f"{name}: NO DATA")
 
