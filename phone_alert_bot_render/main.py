@@ -24,9 +24,13 @@ symbols = {
 }
 
 lines = ["📊 Scanner online"]
+
 for name, ticker in symbols.items():
-    data = yf.download(ticker, interval="1h", period="2d", progress=False)
-    price = float(data["Close"].dropna().iloc[-1])
-    lines.append(f"{name}: {price}")
+    try:
+        data = yf.download(ticker, interval="1h", period="2d", progress=False)
+        price = data["Close"].dropna().values[-1]
+        lines.append(f"{name}: {price}")
+    except Exception:
+        lines.append(f"{name}: error")
 
 send_message("\n".join(lines))
