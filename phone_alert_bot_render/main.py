@@ -22,17 +22,27 @@ def send_message(text):
 
 
 # =========================
-# 🌐 DATA (Twelve Data)
+# 🌐 FOREX (Twelve Data FIXED)
 # =========================
 def get_forex_price(symbol):
     try:
         url = f"https://api.twelvedata.com/price?symbol={symbol}&apikey={TWELVE_API_KEY}"
-        r = requests.get(url, timeout=10).json()
-        return float(r["price"])
+        r = requests.get(url, timeout=10)
+        data = r.json()
+
+        # debug-safe check
+        if "price" not in data:
+            return None
+
+        return float(data["price"])
+
     except:
         return None
 
 
+# =========================
+# 🌐 CRYPTO (CoinGecko)
+# =========================
 def get_crypto_price(coin):
     try:
         url = f"https://api.coingecko.com/api/v3/simple/price?ids={coin}&vs_currencies=usd"
@@ -43,11 +53,12 @@ def get_crypto_price(coin):
 
 
 # =========================
-# 🧠 SIMPLE STRUCTURE
+# 🧠 SIMPLE STRUCTURE ENGINE
 # =========================
 def structure(price, prev):
-    if not price or not prev:
+    if price is None or prev is None:
         return "NO DATA"
+
     if price > prev:
         return "📈 BULLISH"
     elif price < prev:
@@ -56,7 +67,7 @@ def structure(price, prev):
 
 
 # =========================
-# SYMBOLS
+# 📊 SYMBOLS
 # =========================
 forex = {
     "EURUSD": "EUR/USD",
@@ -83,6 +94,7 @@ while True:
     # ---------- FOREX ----------
     for name, symbol in forex.items():
         price = get_forex_price(symbol)
+
         prev = price * 0.999 if price else None
 
         state = structure(price, prev)
@@ -95,6 +107,7 @@ while True:
     # ---------- CRYPTO ----------
     for name, coin in crypto.items():
         price = get_crypto_price(coin)
+
         prev = price * 0.999 if price else None
 
         state = structure(price, prev)
@@ -106,5 +119,5 @@ while True:
 
     send_message("\n".join(lines))
 
-    # ⏱ avoid API spam + Railway limits
-    time.sleep(300)  # every 5 minutes
+    # ⏱ safe delay (prevents API ban + Railway overload)
+    time.sleep(300)
