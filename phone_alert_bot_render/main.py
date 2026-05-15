@@ -10,11 +10,9 @@ def send_message(text):
     payload = {"chat_id": CHAT_ID, "text": text}
     requests.post(url, data=payload)
 
-# test symbol
 symbol = "EURUSD=X"
 
 data = yf.download(symbol, interval="1h", period="2d")
+last_close = float(data["Close"].dropna().iloc[-1])
 
-last_close = data["Close"].iloc[-1]
-
-send_message(f"Scanner test running ✅\n{symbol} last price: {last_close}")
+send_message(f"Scanner test running ✅\n{symbol} last price: {last_close:.5f}")
