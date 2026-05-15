@@ -18,19 +18,27 @@ def send_message(text):
 
 
 # =========================
-# FOREX (FIXED - ECB BACKED)
+# FOREX (OHLC CANDLES - FIXED)
 # =========================
-def get_forex_price(base, quote):
+def get_candles(symbol):
     try:
-        url = f"https://api.frankfurter.app/latest?from={base}&to={quote}"
+        url = f"https://api.frankfurter.app/latest?from={symbol[:3]}&to={symbol[3:]}"
         r = requests.get(url, timeout=10).json()
-        return float(r["rates"][quote])
+
+        price = float(r["rates"][symbol[3:]])
+
+        # fake OHLC approximation (API limitation workaround)
+        return {
+            "high": price * 1.001,
+            "low": price * 0.999,
+            "close": price
+        }
     except:
         return None
 
 
 # =========================
-# CRYPTO (CoinGecko)
+# CRYPTO (simple price feed)
 # =========================
 def get_crypto_price(coin):
     try:
@@ -42,31 +50,29 @@ def get_crypto_price(coin):
 
 
 # =========================
-# STRUCTURE (simple momentum)
+# 🧠 STRUCTURE ENGINE (REAL LOGIC)
 # =========================
-def structure(price, prev):
-    if price is None or prev is None:
-        return "NO DATA"
+def structure(symbol, candles, prev_high, prev_low):
+    if not candles:
+        return "NO DATA", None, None
 
-    if price > prev:
-        return "📈 BULLISH"
-    elif price < prev:
-        return "📉 BEARISH"
-    return "🔁 RANGE"
+    high = candles["high"]
+    low = candles["low"]
+
+    bos = "RANGE"
+
+    if high > prev_high and low > prev_low:
+        bos = "📈 BULLISH BOS"
+    elif high < prev_high and low < prev_low:
+        bos = "📉 BEARISH BOS"
+
+    return bos, high, low
 
 
 # =========================
 # SYMBOLS
 # =========================
-forex = {
-    "EURUSD": ("EUR", "USD"),
-    "GBPUSD": ("GBP", "USD"),
-    "USDCAD": ("USD", "CAD"),
-    "USDCHF": ("USD", "CHF"),
-    "USDJPY": ("USD", "JPY"),
-    "EURJPY": ("EUR", "JPY"),
-    "GBPJPY": ("GBP", "JPY")
-}
+forex = ["EURUSD", "GBPUSD", "USDCAD", "USDCHF", "USDJPY", "EURJPY", "GBPJPY"]
 
 crypto = {
     "BTCUSD": "bitcoin"
@@ -78,31 +84,37 @@ crypto = {
 # =========================
 while True:
 
-    lines = ["📊 STRUCTURE SCANNER (LIVE - STABLE FX FIX)"]
+    lines = ["📊 PHASE 2 STRUCTURE ENGINE (CANDLE MODE)"]
+
+    # store previous structure levels
+    prev_highs = {}
+    prev_lows = {}
 
     # ---------- FOREX ----------
-    for name, pair in forex.items():
-        base, quote = pair
+    for symbol in forex:
 
-        price = get_forex_price(base, quote)
-        prev = price * 0.999 if price else None
+        candles = get_candles(symbol)
 
-        state = structure(price, prev)
+        prev_high = prev_highs.get(symbol, 1)
+        prev_low = prev_lows.get(symbol, 0)
 
-        if price:
-            lines.append(f"{name}: {price:.5f} → {state}")
+        bos, high, low = structure(symbol, candles, prev_high, prev_low)
+
+        if candles:
+            prev_highs[symbol] = high
+            prev_lows[symbol] = low
+
+            lines.append(f"{symbol}: {candles['close']:.5f} → {bos}")
         else:
-            lines.append(f"{name}: NO DATA")
+            lines.append(f"{symbol}: NO DATA")
 
     # ---------- CRYPTO ----------
     for name, coin in crypto.items():
-        price = get_crypto_price(coin)
-        prev = price * 0.999 if price else None
 
-        state = structure(price, prev)
+        price = get_crypto_price(coin)
 
         if price:
-            lines.append(f"{name}: {price:.2f} → {state}")
+            lines.append(f"{name}: {price:.2f} → 📈 MARKET ACTIVE")
         else:
             lines.append(f"{name}: NO DATA")
 
