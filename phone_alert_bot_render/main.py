@@ -10,9 +10,23 @@ def send_message(text):
     payload = {"chat_id": CHAT_ID, "text": text}
     requests.post(url, data=payload)
 
-symbol = "EURUSD=X"
+symbols = {
+    "XAUUSD": "GC=F",
+    "EURUSD": "EURUSD=X",
+    "GBPUSD": "GBPUSD=X",
+    "USDCAD": "USDCAD=X",
+    "USDCHF": "USDCHF=X",
+    "BTCUSD": "BTC-USD",
+    "EURAUD": "EURAUD=X",
+    "EURJPY": "EURJPY=X",
+    "USDJPY": "USDJPY=X",
+    "GBPJPY": "GBPJPY=X"
+}
 
-data = yf.download(symbol, interval="1h", period="2d")
-last_close = float(data["Close"].dropna().iloc[-1])
+lines = ["📊 Scanner online"]
+for name, ticker in symbols.items():
+    data = yf.download(ticker, interval="1h", period="2d", progress=False)
+    price = float(data["Close"].dropna().iloc[-1])
+    lines.append(f"{name}: {price}")
 
-send_message(f"Scanner test running ✅\n{symbol} last price: {last_close:.5f}")
+send_message("\n".join(lines))
