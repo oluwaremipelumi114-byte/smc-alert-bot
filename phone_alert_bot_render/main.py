@@ -2,23 +2,17 @@ import os
 import requests
 import time
 
-# =========================
-# TELEGRAM
-# =========================
 BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
 CHAT_ID = os.getenv("TELEGRAM_CHAT_ID")
 
 
 def send_message(text):
     url = f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage"
-    try:
-        requests.post(url, data={"chat_id": CHAT_ID, "text": text})
-    except:
-        pass
+    requests.post(url, data={"chat_id": CHAT_ID, "text": text})
 
 
 # =========================
-# PRICE SOURCE (simple + stable)
+# PRICE FEED
 # =========================
 def get_price(symbol):
     try:
@@ -30,95 +24,67 @@ def get_price(symbol):
 
 
 # =========================
-# CRYPTO
+# HISTORY STORAGE
 # =========================
-def get_crypto_price(coin):
-    try:
-        url = f"https://api.coingecko.com/api/v3/simple/price?ids={coin}&vs_currencies=usd"
-        r = requests.get(url, timeout=10).json()
-        return float(r[coin]["usd"])
-    except:
-        return None
+symbols = ["EURUSD","GBPUSD","USDCAD","USDCHF","USDJPY","EURJPY","GBPJPY"]
+
+history = {s: [] for s in symbols}
 
 
 # =========================
-# 🧠 LIQUIDITY ENGINE
+# LIQUIDITY LOGIC
 # =========================
-def detect_liquidity(prices):
-    if len(prices) < 5:
+def sweep_and_mss(data):
+    if len(data) < 5:
         return None, None
 
-    highs = max(prices[-5:])
-    lows = min(prices[-5:])
+    recent_high = max(data[-5:])
+    recent_low = min(data[-5:])
 
-    return highs, lows
+    last = data[-1]
+    prev = data[-2]
 
-
-def detect_sweep(price, prev_high, prev_low):
     sweep = None
+    mss = None
 
-    if price > prev_high:
+    # sweep logic
+    if last > recent_high:
         sweep = "🔥 BUY-SIDE LIQUIDITY SWEPT"
-    elif price < prev_low:
+    elif last < recent_low:
         sweep = "🔥 SELL-SIDE LIQUIDITY SWEPT"
 
-    return sweep
+    # MSS logic
+    if sweep == "🔥 BUY-SIDE LIQUIDITY SWEPT" and last < prev:
+        mss = "📉 MSS BEARISH"
+    elif sweep == "🔥 SELL-SIDE LIQUIDITY SWEPT" and last > prev:
+        mss = "📈 MSS BULLISH"
 
-
-def detect_mss(price, prev_price, sweep):
-    if not sweep:
-        return None
-
-    if "BUY-SIDE" in sweep and price < prev_price:
-        return "📉 MSS BEARISH CONFIRMED"
-
-    if "SELL-SIDE" in sweep and price > prev_price:
-        return "📈 MSS BULLISH CONFIRMED"
-
-    return None
+    return sweep, mss
 
 
 # =========================
-# SYMBOLS
-# =========================
-forex = ["EURUSD", "GBPUSD", "USDCAD", "USDCHF", "USDJPY", "EURJPY", "GBPJPY"]
-
-crypto = {
-    "BTCUSD": "bitcoin"
-}
-
-
-# store history
-history = {sym: [] for sym in forex}
-
-
-# =========================
-# MAIN LOOP
+# LOOP
 # =========================
 while True:
 
-    lines = ["📊 PHASE 3: LIQUIDITY + MSS ENGINE"]
+    lines = ["📊 PHASE 3 LIQUIDITY ENGINE (ACTIVE)"]
 
-    # ---------- FOREX ----------
-    for symbol in forex:
+    for sym in symbols:
 
-        price = get_price(symbol)
+        price = get_price(sym)
 
         if not price:
-            lines.append(f"{symbol}: NO DATA")
+            lines.append(f"{sym}: NO DATA")
             continue
 
-        history[symbol].append(price)
+        history[sym].append(price)
 
-        if len(history[symbol]) > 20:
-            history[symbol].pop(0)
+        if len(history[sym]) > 20:
+            history[sym].pop(0)
 
-        prev_high, prev_low = detect_liquidity(history[symbol])
+        sweep, mss = sweep_and_mss(history[sym])
 
-        sweep = detect_sweep(price, prev_high, prev_low)
-        mss = detect_mss(price, history[symbol][-2] if len(history[symbol]) > 1 else price, sweep)
-
-        msg = f"{symbol}: {price:.5f}"
+        msg = f"{sym}: {price:.5f}"
 
         if sweep:
             msg += f" → {sweep}"
@@ -127,16 +93,6 @@ while True:
             msg += f" → {mss}"
 
         lines.append(msg)
-
-    # ---------- CRYPTO ----------
-    for name, coin in crypto.items():
-
-        price = get_crypto_price(coin)
-
-        if price:
-            lines.append(f"{name}: {price:.2f} → MARKET ACTIVE")
-        else:
-            lines.append(f"{name}: NO DATA")
 
     send_message("\n".join(lines))
 
