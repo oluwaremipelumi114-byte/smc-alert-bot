@@ -36,13 +36,11 @@ def get_structure(data):
     if len(data) < 20:
         return "NO DATA"
 
-    # recent swing reference
-    last_high = highs.iloc[-1]
-    last_low = lows.iloc[-1]
-
-    # previous range (structure reference)
     recent_highs = highs.iloc[-10:-1]
     recent_lows = lows.iloc[-10:-1]
+
+    last_high = highs.iloc[-1]
+    last_low = lows.iloc[-1]
 
     bullish_bos = last_high > recent_highs.max()
     bearish_bos = last_low < recent_lows.min()
@@ -56,15 +54,31 @@ def get_structure(data):
 
 
 # =========================
-# 📊 MAIN SCANNER
+# 📊 MAIN LOOP
 # =========================
 lines = ["📊 STRUCTURE SCANNER ONLINE"]
 
 for name, ticker in symbols.items():
     try:
-        data = yf.download(ticker, interval="1h", period="5d", progress=False)
+        data = yf.download(
+            ticker,
+            interval="1h",
+            period="5d",
+            progress=False,
+            threads=False
+        )
+
+        # 🚨 SAFE CHECKS
+        if data is None or data.empty:
+            lines.append(f"{name}: NO DATA")
+            continue
 
         close = data["Close"].dropna()
+
+        if close.empty:
+            lines.append(f"{name}: NO CLOSE DATA")
+            continue
+
         price = float(close.iloc[-1])
 
         structure = get_structure(data)
