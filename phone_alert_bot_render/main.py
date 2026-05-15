@@ -3,16 +3,12 @@ import requests
 import time
 
 # =========================
-# 🔑 KEYS
+# TELEGRAM
 # =========================
 BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
 CHAT_ID = os.getenv("TELEGRAM_CHAT_ID")
-TWELVE_API_KEY = os.getenv("TWELVE_API_KEY")
 
 
-# =========================
-# 📲 TELEGRAM
-# =========================
 def send_message(text):
     url = f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage"
     try:
@@ -22,26 +18,19 @@ def send_message(text):
 
 
 # =========================
-# 🌐 FOREX (Twelve Data FIXED)
+# FOREX (FIXED - FREE & STABLE)
 # =========================
-def get_forex_price(symbol):
+def get_forex_price(base, quote):
     try:
-        url = f"https://api.twelvedata.com/price?symbol={symbol}&apikey={TWELVE_API_KEY}"
-        r = requests.get(url, timeout=10)
-        data = r.json()
-
-        # debug-safe check
-        if "price" not in data:
-            return None
-
-        return float(data["price"])
-
+        url = f"https://api.exchangerate.host/convert?from={base}&to={quote}"
+        r = requests.get(url, timeout=10).json()
+        return float(r["result"])
     except:
         return None
 
 
 # =========================
-# 🌐 CRYPTO (CoinGecko)
+# CRYPTO (CoinGecko)
 # =========================
 def get_crypto_price(coin):
     try:
@@ -53,7 +42,7 @@ def get_crypto_price(coin):
 
 
 # =========================
-# 🧠 SIMPLE STRUCTURE ENGINE
+# STRUCTURE (simple)
 # =========================
 def structure(price, prev):
     if price is None or prev is None:
@@ -67,16 +56,16 @@ def structure(price, prev):
 
 
 # =========================
-# 📊 SYMBOLS
+# SYMBOLS
 # =========================
 forex = {
-    "EURUSD": "EUR/USD",
-    "GBPUSD": "GBP/USD",
-    "USDCAD": "USD/CAD",
-    "USDCHF": "USD/CHF",
-    "USDJPY": "USD/JPY",
-    "EURJPY": "EUR/JPY",
-    "GBPJPY": "GBP/JPY"
+    "EURUSD": ("EUR", "USD"),
+    "GBPUSD": ("GBP", "USD"),
+    "USDCAD": ("USD", "CAD"),
+    "USDCHF": ("USD", "CHF"),
+    "USDJPY": ("USD", "JPY"),
+    "EURJPY": ("EUR", "JPY"),
+    "GBPJPY": ("GBP", "JPY")
 }
 
 crypto = {
@@ -85,16 +74,17 @@ crypto = {
 
 
 # =========================
-# 🚀 MAIN LOOP (RAILWAY SAFE)
+# MAIN LOOP
 # =========================
 while True:
 
-    lines = ["📊 STRUCTURE SCANNER (LIVE)"]
+    lines = ["📊 STRUCTURE SCANNER (LIVE FIXED)"]
 
     # ---------- FOREX ----------
-    for name, symbol in forex.items():
-        price = get_forex_price(symbol)
+    for name, pair in forex.items():
+        base, quote = pair
 
+        price = get_forex_price(base, quote)
         prev = price * 0.999 if price else None
 
         state = structure(price, prev)
@@ -107,7 +97,6 @@ while True:
     # ---------- CRYPTO ----------
     for name, coin in crypto.items():
         price = get_crypto_price(coin)
-
         prev = price * 0.999 if price else None
 
         state = structure(price, prev)
@@ -119,5 +108,4 @@ while True:
 
     send_message("\n".join(lines))
 
-    # ⏱ safe delay (prevents API ban + Railway overload)
     time.sleep(300)
